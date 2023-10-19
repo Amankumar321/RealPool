@@ -1,53 +1,84 @@
 using System;
 using System.Collections;
 using System.Collections.Generic;
+using Unity.VisualScripting;
 using UnityEngine;
 
 public class Cue : MonoBehaviour
 {
-    public Rigidbody cueBall;
-    public PhysicMaterial ballPhysicMaterial;
+    //private Rigidbody cueBallBody;
+    //private CueBall cueBall;
     //private GameObject cueBody;
-    public LineRenderer aimLine;
-    public LineRenderer aimHitCircle;
-    public LineRenderer deviationLine;
-    public LineRenderer targetLine;
-    private const float lineHeight = 1.2f;
+    private LineRenderer aimLine;
+    private LineRenderer aimHitCircle;
+    private LineRenderer deviationLine;
+    private LineRenderer targetLine;
+    private LineRenderer aimLineShadow;
+    private LineRenderer aimHitCircleShadow;
+    private LineRenderer deviationLineShadow;
+    private LineRenderer targetLineShadow;
+    private const float lineHeight = 2f;
     private const float accuracy = 5f;
+
+    public Path path;
+
+    private GameObject playingArea;
+    private GameObject fullArea;
 
     //private float strength = 5f;
     private Vector3 prevPos;
     bool startDrag = false;
 
-    public GameController gameController;
+    private const float powerFactor = 0.5f;
+    private const float spinFactor = 50f;
+
+    private GameController gameController;
 
     // Start is called before the first frame update
     void Start()
     {
-        //Application.targetFrameRate = 120;
-        //aimLine.colorGradient = Gradient;
-        aimLine.startColor = Color.white;
-        aimLine.endColor = Color.white;
-        deviationLine.startColor = Color.white;
-        deviationLine.endColor = Color.white;
-        targetLine.startColor = Color.white;
-        targetLine.endColor = Color.white;
+        //cueBall = GameObject.FindWithTag("CueBall").GetComponent<CueBall>();
+        //cueBallBody = GameObject.FindWithTag("CueBall").GetComponent<Rigidbody>();
+        playingArea = GameObject.Find("PlayingArea");
+        fullArea = GameObject.Find("FullArea");
+        gameController = GameObject.Find("GameController").GetComponent<GameController>();
+        path = ScriptableObject.CreateInstance<Path>();
+    }
+
+    void InitLines()
+    {
+        aimLine = gameController.cueBall.transform.Find("AimLine").GetComponent<LineRenderer>();
+        aimHitCircle = gameController.cueBall.transform.Find("AimHitCircle").GetComponent<LineRenderer>();
+        deviationLine = gameController.cueBall.transform.Find("DeviationLine").GetComponent<LineRenderer>();
+        targetLine = gameController.cueBall.transform.Find("TargetLine").GetComponent<LineRenderer>();
+
+        // aimLine.startColor = Color.white;
+        // aimLine.endColor = Color.white;
+        // deviationLine.startColor = Color.white;
+        // deviationLine.endColor = Color.white;
+        // targetLine.startColor = Color.white;
+        // targetLine.endColor = Color.white;
+        aimLineShadow = gameController.cueBall.transform.Find("AimLineShadow").GetComponent<LineRenderer>();
+        aimHitCircleShadow = gameController.cueBall.transform.Find("AimHitCircleShadow").GetComponent<LineRenderer>();
+        deviationLineShadow = gameController.cueBall.transform.Find("DeviationLineShadow").GetComponent<LineRenderer>();
+        targetLineShadow = gameController.cueBall.transform.Find("TargetLineShadow").GetComponent<LineRenderer>();
     }
 
 
     float GetRadius()
     {
-        return cueBall.GetComponent<SphereCollider>().radius * cueBall.transform.lossyScale.x;
+        Ball b = gameController.cueBall.GetComponent<Ball>();
+        return b.GetComponent<SphereCollider>().radius * b.transform.lossyScale.x;
     }
     void DragAndMove()
     {
-        if (Input.GetMouseButton(0) == true) {
+        if (Input.GetMouseButton(0) == true && gameController.cueBall.isDragged == false && !gameController.UI.hasControl) {
             if (startDrag == true) {
                 Vector2 mouse = new (Input.mousePosition.x,Input.mousePosition.y);
                 Ray ray;
                 ray = Camera.main.ScreenPointToRay(mouse);
                 
-                if(Physics.Raycast(ray,out RaycastHit hit, 100))
+                if(fullArea.GetComponent<MeshCollider>().Raycast(ray,out RaycastHit hit, 100))
                 {
                     Vector3 a = new (hit.point.x, transform.position.y, hit.point.z);
                     Vector3 b = new (transform.position.x, transform.position.y, transform.position.z);
@@ -64,7 +95,7 @@ public class Cue : MonoBehaviour
                 Ray ray;
                 ray = Camera.main.ScreenPointToRay(mouse);
                 
-                if(Physics.Raycast(ray, out RaycastHit hit, 100))
+                if(fullArea.GetComponent<MeshCollider>().Raycast(ray, out RaycastHit hit, 100))
                 {
                     Vector3 a = new (hit.point.x, transform.position.y, hit.point.z);
                     Vector3 b = new (transform.position.x, transform.position.y, transform.position.z);
@@ -81,20 +112,20 @@ public class Cue : MonoBehaviour
     void CalculateDeviation(RaycastHit hitInfo, Vector3 start)
     {
         float factor = 20f;
-        float radius = GetRadius() * 9/10;
-        float m1 = cueBall.mass;
+        float radius = GetRadius();
+        float m1 = gameController.cueBallBody.mass;
         float m2 = hitInfo.rigidbody.mass;
-        float e = ballPhysicMaterial.bounciness;
-   
+        float e = gameController.cueBall.GetComponent<SphereCollider>().material.bounciness;
+
         float u1 = Vector3.Dot(transform.forward * factor, -hitInfo.normal.normalized);
-        Vector3 tangent = Vector3.Cross(-hitInfo.normal, new Vector3(0, -1, 0));
+        Vector3 tangent = Vector3.Cross(-hitInfo.normal, Vector3.down);
         float tangentComponent = Vector3.Dot(transform.forward * factor, tangent);
-        float v1 = (m1 * u1 - e * m2 * u1) / (m1 + m2);
-        
+        float v1 = (1 - e) * u1;
+
         //Vector3 height = new (0, lineHeight, 0);
         Vector3 end = start + (v1 * -hitInfo.normal.normalized + tangentComponent * tangent);
         
-        Vector3[] positionArray = new [] {ToCameraPerspective(start, lineHeight), ToCameraPerspective(end, lineHeight)};
+        Vector3[] positionArray = new [] {SetHeight(start, lineHeight), SetHeight(end, lineHeight)};
         deviationLine.positionCount = 2;
         deviationLine.startWidth = radius / 5;
         deviationLine.endWidth = radius / 5;
@@ -104,18 +135,18 @@ public class Cue : MonoBehaviour
     void CalculateTargetLine(RaycastHit hitInfo)
     {
         float factor = 20f;
-        float radius = GetRadius() * 9/10;
-        float m1 = cueBall.mass;
-        float m2 = hitInfo.rigidbody.mass;
-        float e = ballPhysicMaterial.bounciness;
+        float radius = GetRadius();
+        //float m1 = gameController.cueBallBody.mass;
+        //float m2 = hitInfo.rigidbody.mass;
+        float e = gameController.cueBall.GetComponent<SphereCollider>().material.bounciness;
         float u1 = Vector3.Dot(transform.forward * factor, -hitInfo.normal.normalized);
-        float v2 = (1 + e) * m1 * u1 / (m1 + m2);
+        float v2 = e * u1;
 
         Vector3 start = hitInfo.rigidbody.position;
         Vector3 end = start + (v2 * -hitInfo.normal.normalized);
         //Vector3 height = new (0, lineHeight, 0);
         
-        Vector3[] positionArray = new [] {ToCameraPerspective(start, lineHeight), ToCameraPerspective(end, lineHeight)};
+        Vector3[] positionArray = new [] {SetHeight(start, lineHeight), SetHeight(end, lineHeight)};
         targetLine.positionCount = 2;
         targetLine.startWidth = radius / 5;
         targetLine.endWidth = radius / 5;
@@ -138,7 +169,7 @@ public class Cue : MonoBehaviour
             y = pos.y;
             z = Mathf.Cos(angle) * radius + pos.z;
 
-            line.SetPosition(i, ToCameraPerspective(new Vector3(x, y, z), lineHeight));
+            line.SetPosition(i, SetHeight(new Vector3(x, y, z), lineHeight));
 
             angle += change;
         }
@@ -147,12 +178,12 @@ public class Cue : MonoBehaviour
         x = Mathf.Sin(angle) * radius + pos.x;
         y = pos.y;
         z = Mathf.Cos(angle) * radius + pos.z;
-        line.SetPosition(i, ToCameraPerspective(new Vector3(x,y,z), lineHeight));
+        line.SetPosition(i, SetHeight(new Vector3(x,y,z), lineHeight));
 
         // x = Mathf.Sin(Mathf.Deg2Rad * -45) * radius + pos.x;
         // y = pos.y;
         // z = Mathf.Cos(Mathf.Deg2Rad * -45) * radius + pos.z;
-        // line.SetPosition(i + 2, ToCameraPerspective(new Vector3(x,y,z), lineHeight));
+        // line.SetPosition(i + 2, SetHeight(new Vector3(x,y,z), lineHeight));
     }
 
     void DrawCircle(LineRenderer line, Vector3 pos, int segments, float radius)
@@ -170,7 +201,7 @@ public class Cue : MonoBehaviour
             y = pos.y;
             z = Mathf.Cos(angle) * radius + pos.z;
 
-            line.SetPosition(i, ToCameraPerspective(new Vector3(x, y, z), lineHeight));
+            line.SetPosition(i, SetHeight(new Vector3(x, y, z), lineHeight));
 
             angle += change;
         }
@@ -179,13 +210,24 @@ public class Cue : MonoBehaviour
 
     void Aim()
     {
-        float radius = GetRadius() * 9/10;
-        if (Physics.SphereCast(transform.position, radius, transform.forward, out RaycastHit hitInfo, Mathf.Infinity))
+        // path.FindForward(gameController.cueBall.transform.position, transform.forward, 2);
+        // return;
+
+        // path.ClearMarkers();
+        // path.SetGameController(gameController);
+        // path.FindForward(gameController.cueBall.transform.position, transform.forward, 6);
+        // return;
+        InitLines();
+        float radius = GetRadius();
+        //if (Physics.SphereCast(transform.position, radius, transform.forward, out RaycastHit hitInfo, Mathf.Infinity, 1, QueryTriggerInteraction.Collide))
+        if (Physics.SphereCast(transform.position, radius, transform.forward, out RaycastHit hitInfo, 20))
         {    
             //Vector3 height = new (0, lineHeight, 0);
-            Vector3 finalPosition = hitInfo.point + hitInfo.normal * radius;
+            //Debug.Log(hitInfo.transform.name);
+
+            Vector3 finalPosition = transform.position + transform.forward * hitInfo.distance;
             
-            Vector3[] positionArray = new []{ToCameraPerspective(cueBall.transform.position, lineHeight), ToCameraPerspective(finalPosition, lineHeight)};
+            Vector3[] positionArray = new []{SetHeight(gameController.cueBallBody.transform.position, lineHeight), SetHeight(finalPosition, lineHeight)};
             aimLine.positionCount = 2;
             aimLine.startWidth = radius / 5;
             aimLine.endWidth = radius / 5;
@@ -193,9 +235,9 @@ public class Cue : MonoBehaviour
             
             Player active = gameController.GetActivePlayer();
             bool isBall = hitInfo.transform.tag.StartsWith("Ball");
-            bool canHitBall = (active.HasGroup() && active.BallInGroup(hitInfo.transform.tag)) || !active.HasGroup();
+            //bool canHitBall = ( && active.BallInGroup(hitInfo.transform.tag)) || !active.HasGroup();
 
-            if (!isBall || (canHitBall && isBall))
+            if (!isBall || (gameController.rules.CheckHitableBall(hitInfo.transform.tag) && isBall))
             {
                 aimHitCircle.startColor = Color.white;
                 aimHitCircle.endColor = Color.white;
@@ -210,7 +252,7 @@ public class Cue : MonoBehaviour
             aimHitCircle.startWidth = radius / 5;
             aimHitCircle.endWidth = radius / 5;
 
-            if (isBall && canHitBall)
+            if (isBall && gameController.rules.CheckHitableBall(hitInfo.transform.tag))
             {
                 CalculateDeviation(hitInfo, finalPosition);
                 CalculateTargetLine(hitInfo);
@@ -222,41 +264,103 @@ public class Cue : MonoBehaviour
                 targetLine.startWidth = 0;
                 targetLine.endWidth = 0;
             }
+
+            DrawShadow();
         }
     }
-
-
-    Vector3 ToCameraPerspective(Vector3 actualPoint, float atHeight)
+    
+    void DrawShadow()
     {
-        float ratio = (Camera.main.transform.position.y - atHeight) / (Camera.main.transform.position.y - actualPoint.y);
-        Vector3 vec = actualPoint - Camera.main.transform.position;
-        Vector3 direction = vec.normalized;
-        float distance = vec.magnitude * ratio;
+        // LineRenderer aimLineShadow = gameController.cueBall.transform.Find("AimLineShadow").GetComponent<LineRenderer>();
+        // LineRenderer aimHitCircleShadow = gameController.cueBall.transform.Find("AimHitCircleShadow").GetComponent<LineRenderer>();
+        // LineRenderer deviationLineShadow = gameController.cueBall.transform.Find("DeviationLineShadow").GetComponent<LineRenderer>();
+        // LineRenderer targetLineShadow = gameController.cueBall.transform.Find("TargetLineShadow").GetComponent<LineRenderer>();
 
-        return direction * distance + Camera.main.transform.position;
+        aimLineShadow.positionCount = aimLine.positionCount;
+        aimLineShadow.startWidth = aimLine.startWidth * 2.5f;
+        aimLineShadow.endWidth = aimLine.endWidth * 2.5f;
+        for (int i = 0; i < aimLine.positionCount; i++)
+        {
+            aimLineShadow.SetPosition(i, aimLine.GetPosition(i) + Vector3.down * 0.00001f);
+        }
+        aimLineShadow.numCapVertices = 10; 
+
+        aimHitCircleShadow.positionCount = aimHitCircle.positionCount;
+        aimHitCircleShadow.startWidth = aimHitCircle.startWidth * 2.5f;
+        aimHitCircleShadow.endWidth = aimHitCircle.endWidth * 2.5f;
+        for (int i = 0; i < aimHitCircle.positionCount; i++)
+        {
+            aimHitCircleShadow.SetPosition(i, aimHitCircle.GetPosition(i) + Vector3.down * 0.00001f);
+        }
+        aimHitCircleShadow.numCapVertices = 10;
+
+        deviationLineShadow.positionCount = deviationLine.positionCount;
+        deviationLineShadow.startWidth = deviationLine.startWidth * 2.5f;
+        deviationLineShadow.endWidth = deviationLine.endWidth * 2.5f;
+        for (int i = 0; i < deviationLine.positionCount; i++)
+        {
+            deviationLineShadow.SetPosition(i, deviationLine.GetPosition(i) + Vector3.down * 0.00001f);
+        }
+        deviationLineShadow.numCapVertices = 10; 
+
+        targetLineShadow.positionCount = targetLine.positionCount;
+        targetLineShadow.startWidth = targetLine.startWidth * 2.5f;
+        targetLineShadow.endWidth = targetLine.endWidth * 2.5f;
+        for (int i = 0; i < targetLine.positionCount; i++)
+        {
+            targetLineShadow.SetPosition(i, targetLine.GetPosition(i) + Vector3.down * 0.00001f);
+        }
+        targetLineShadow.numCapVertices = 10; 
+    }
+
+    Vector3 SetHeight(Vector3 actualPoint, float atHeight)
+    {
+        return actualPoint + Vector3.up * atHeight;
     }
 
     public void Hide()
     {
         gameObject.SetActive(false);
+        //return;
         aimLine.gameObject.SetActive(false);
         aimHitCircle.gameObject.SetActive(false);
         deviationLine.gameObject.SetActive(false);
         targetLine.gameObject.SetActive(false);
+
+        aimLineShadow.gameObject.SetActive(false);
+        aimHitCircleShadow.gameObject.SetActive(false);
+        deviationLineShadow.gameObject.SetActive(false);
+        targetLineShadow.gameObject.SetActive(false);
     }
 
     public void Show()
     {
+        InitLines();
         gameObject.SetActive(true);
         aimLine.gameObject.SetActive(true);
         aimHitCircle.gameObject.SetActive(true);
         deviationLine.gameObject.SetActive(true);
         targetLine.gameObject.SetActive(true);
+
+        aimLineShadow.gameObject.SetActive(true);
+        aimHitCircleShadow.gameObject.SetActive(true);
+        deviationLineShadow.gameObject.SetActive(true);
+        targetLineShadow.gameObject.SetActive(true);
     }
 
     void Follow() 
     {
-        transform.position = cueBall.position;
+        transform.position = gameController.cueBallBody.position;
+    }
+
+    public void TakeShot(float power,  Vector3 spinVector)
+    {
+        //cueBallBody.AddForce(cue.transform.forward * (powerFactor * slider.value), ForceMode.Acceleration);
+        //cueBallBody.AddTorque(Vector3.Cross(cue.transform.forward, relativeSpin) * spinFactor, ForceMode.Acceleration);
+        Vector3 relativeSpin = transform.rotation * spinVector;
+        gameController.cueBallBody.velocity = transform.forward * (powerFactor * power);
+        gameController.cueBallBody.angularVelocity = Vector3.Cross(transform.forward, relativeSpin) * spinFactor;
+        gameController.OnShot();
     }
 
     // Update is called once per frame

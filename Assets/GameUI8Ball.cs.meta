@@ -1,0 +1,15 @@
+fileFormatVersion: 2
+guid: 6e43f58722b4a4625bee97217cd5eb1d
+MonoImporter:
+  externalObjects: {}
+  serializedVersion: 2
+  defaultReferences:
+  - leftPanelPrefab: {instanceID: 0}
+  - rightPanelPrefab: {instanceID: 0}
+  - leftPanel: {instanceID: 0}
+  - rightPanel: {instanceID: 0}
+  executionOrder: 0
+  icon: {instanceID: 0}
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 

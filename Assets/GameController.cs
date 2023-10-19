@@ -1,91 +1,115 @@
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq.Expressions;
 using TMPro;
 using UnityEngine;
+using UnityEngine.Events;
 
 public class GameController : MonoBehaviour
 {
-    public GameUI UI;
+    //public GameUI UI;
     private bool inMotion = false;
-    private bool isTableOpen = false;
-    private bool isBreakShot = true;
+    public bool isTableOpen = false;
+    public bool isBreakShot = true;
     //private int playerTurn = 1;
     public PoolBalls balls;
-    private List<string> pottedBalls = new ();
-    private List<string> hitRailBalls = new ();
-    private bool isGameOver = false;
+    public List<string> pottedBalls = new ();
+    public List<string> hitRailBalls = new ();
+    public List<string> contactedBalls = new ();
+    public bool isGameOver = false;
     public Player player1;
     public Player player2;
     public Cue cue;
+    public CueBall cueBall;
+    public Rigidbody cueBallBody;
+    public GameObject cuePrefab;
 
-    private Player activePlayer;
+    public GameObject ballHighlightPrefab;
+    private GameObject tailSpot;
+
+    public IRules rules;
+    public UIManager UI;
+
+    public Player activePlayer;
+
+    public UnityEvent onTurnEvent = new();
+
+    public GameObject[] rails;
+
+    private bool toSwitchTurn = false;
    
-    private string[] ballTags = {"Ball1", "Ball2", "Ball3", "Ball4", "Ball5", "Ball6", "Ball7", "Ball8", "Ball9", "Ball10", "Ball11", "Ball12", "Ball13", "Ball14", "Ball15"};
-
     // Start is called before the first frame update
     void Start()
     {
         activePlayer = player1;
-        //cueBall = GameObject.FindWithTag("CueBall");
+        player1.hasBallInHand = true;
+        tailSpot = GameObject.Find("TailSpot");
+
+        rails = GameObject.FindGameObjectsWithTag("Rails");
+        //player2.isBot = true;
+
+        string gameType = PlayerPrefs.GetString("GameType");
+
+        gameType = "8Ball";
+       
+        if (gameType == "8Ball")
+        {
+            balls.CreateAll("8Ball");
+            rules = new Rules8Ball(this);
+            UI.Create("8Ball", this);
+        }
+        else if (gameType == "9Ball")
+        {
+            balls.CreateAll("9Ball");
+            rules = new Rules9Ball(this);
+            UI.Create("9Ball", this);
+        }
+        // else {
+        //     Debug.Log("here x");
+        //     balls.CreateAll("9Ball");
+        //     rules = new Rules9Ball(this);
+        //     UI.Create("9Ball", this);
+        // }
+
+        cueBall = balls.GetCueball();
+        cueBallBody = cueBall.GetComponent<Rigidbody>();
+        cue = Instantiate(cuePrefab).GetComponent<Cue>();
+    }
+
+    public void OnBallContact(Ball b)
+    {
+        if (!contactedBalls.Contains(b.tag))
+        {
+            contactedBalls.Add(b.tag);
+        }
     }
 
 
-    public void OnBallRailHit(Ball b1)
+    public void OnBallRailHit(Ball b)
     {
-        bool repeat = false;
-        foreach (string b2 in hitRailBalls)
+        if (!hitRailBalls.Contains(b.tag))
         {
-            if (b1.tag == b2)
-            {
-                repeat = true;
-            }
-        }
-        if (!repeat)
-        {
-            hitRailBalls.Add(b1.tag);
+            hitRailBalls.Add(b.tag);
         }
     }
 
     public void OnBallPot(Ball ball)
     {
         pottedBalls.Add(ball.tag);
-        //UI.RemoveBallDisplay(ball.gameObject);
-        //Destroy(ball.gameObject);
-        if (ball.tag != "CueBall")
-        {
-            //UI.RemoveBallDisplay(ball.gameObject);
-            Destroy(ball.gameObject);
-        }
-        if (ball.tag == "CueBall") {
-            ball.transform.position = Vector3.zero;
-            ball.body.useGravity = false;
-            ball.body.velocity = Vector3.zero;
-            ball.body.angularVelocity = Vector3.zero;
-            ball.enabled = false;
-        }
+        Destroy(ball.gameObject);
     }
 
-    void EndGame()
+    public void EndGame()
     {
-        bool didPotCueball = false;
-        foreach (string b in pottedBalls)
-        {
-            if (b == "CueBall")
-            {
-                didPotCueball = true;
-            }
-        }
-
-        if (activePlayer.CanPotBlack() && !didPotCueball) {
-            Debug.Log("Win game");
-        }
-        else {
-            Debug.Log("Lose game");
-        }
         isGameOver = true;
     }
 
-    void SwitchTurn()
+    public void SetSwitchTurn(bool value)
+    {
+        toSwitchTurn = value;
+    }
+
+    public void SwitchTurn()
     {
         Debug.Log("Switch turn");
         if (activePlayer == player1) {
@@ -94,177 +118,43 @@ public class GameController : MonoBehaviour
         else if (activePlayer = player2) {
             activePlayer = player1;
         }
+        UI.OnSwitchTurn();
         cue.Show();
+        onTurnEvent.Invoke();
     }
 
-    void KeepTurn()
+    public void KeepTurn()
     {
         Debug.Log("Keep Turn");
         cue.Show();
+        onTurnEvent.Invoke();
     }
 
-    void RespawnCueball()
+    public void RespawnCueball()
     {
         Debug.Log("respawning");
-        GameObject cueBall = GameObject.FindWithTag("CueBall");
-        cueBall.transform.position = new Vector3(0, 0.5f, 0);
-        cueBall.GetComponent<Ball>().enabled = true;
+        GameObject g = balls.CreateBall("CueBall", new Vector3(0, 0.5f, 0));
+        cueBall = g.GetComponent<CueBall>();
+        cueBallBody = g.GetComponent<Rigidbody>();
     }
 
-    void CheckLegalBreak()
+    public void Respawn9Ball()
     {
-        foreach (string ball in pottedBalls) 
-        {
-            if (ball == "CueBall")
-            {
-                Debug.Log("Foul at Break");
-                RespawnCueball();
-                SwitchTurn();
-                return;
-            }
-        }
-
-        int count = 0;
-
-        foreach (string ball in hitRailBalls)
-        {
-            if (ball != "CueBall")
-            {
-                count++;
-            }
-        }
-
-        if (count < 4 && pottedBalls.Count == 0)
-        {
-            Debug.Log("illegal break");
-            SwitchTurn();
-        }
-        else if (count >= 4 && pottedBalls.Count == 0){
-            Debug.Log("Legal break");
-            SwitchTurn();
-        }
-        else if (pottedBalls.Count > 0) {
-            KeepTurn();
-        }
+        Debug.Log("respawning 9 ball");
+        balls.CreateBall("Ball9", new Vector3(tailSpot.transform.position.x, 0.5f, tailSpot.transform.position.z));
     }
 
-    void CheckLegalShot()
+    public void GetBallInHand()
     {
-        foreach (string ball in pottedBalls) 
-        {
-            if (ball == "CueBall")
-            {
-                Debug.Log("Foul");
-                RespawnCueball();
-                SwitchTurn();
-                return;
-            }
-        }
-
-        if (hitRailBalls.Count == 0 && pottedBalls.Count == 0)
-        {
-            Debug.Log("Foul rail");
-            SwitchTurn();
-        }
-        else if (isTableOpen) {
-            if (pottedBalls.Count > 0)
-            {
-                string firstBall = pottedBalls[0];
-                int index = 0;
-
-                foreach (string tag in ballTags)
-                {
-                    index++;
-                    if (firstBall == tag) break;
-                }
-                if (index < 8) {
-                    Player inactivePlayer = activePlayer == player1 ? player2 : player1;
-                    activePlayer.SetGroup("Solids");
-                    inactivePlayer.SetGroup("Stripes");
-                    Debug.Log("Solids");
-                }
-                if (index > 8) {
-                    Player inactivePlayer = activePlayer == player1 ? player2 : player1;
-                    activePlayer.SetGroup("Stripes");
-                    inactivePlayer.SetGroup("Solids");
-                    Debug.Log("Stripes");
-                }
-                isTableOpen = false;
-                KeepTurn();
-            }
-            else
-            {
-                SwitchTurn();
-            }
-        }
-        else if (pottedBalls.Count > 0) {
-            bool didPotOwnBall = false;
-            foreach (string tag in pottedBalls)
-            {
-                if (activePlayer.BallInGroup(tag))
-                {
-                    didPotOwnBall = true;
-                }
-            }
-            if (didPotOwnBall)
-            {
-                KeepTurn();
-            }
-            else
-            {
-                SwitchTurn();
-            }
-        }
-        else {
-            SwitchTurn();
-        }
+        activePlayer.RecieveBallInHand();
     }
 
-    void CheckRules()
-    {
-        if (isGameOver) return;
-
-        bool didPot8Ball = false;
-        foreach (string ball in pottedBalls) 
-        {
-            if (ball == "Ball8")
-            {
-                didPot8Ball = true;
-            }
-            if (ball != "Ball8" && ball != "CueBall")
-            {
-                UI.RemoveBallDisplay(ball);
-                //Destroy(ball.gameObject);
-            }
-        }
-
-        if (didPot8Ball)
-        {
-            EndGame();
-            return;
-        }
-
-        if (!isBreakShot)
-        {
-            CheckLegalShot();            
-        }
-        else
-        {
-            CheckLegalBreak();
-            isBreakShot = false;
-            isTableOpen = true;
-        }
-
-        player1.PotBalls(pottedBalls);
-        player2.PotBalls(pottedBalls);
-
-        hitRailBalls.Clear();
-        pottedBalls.Clear();
-    }
 
     public void OnShot()
     {
         inMotion = true;
+        UI.OnShot();
+        activePlayer.hasBallInHand = false;
         cue.Hide();
     }
 
@@ -293,7 +183,22 @@ public class GameController : MonoBehaviour
         {
             inMotion = false;
             Debug.Log("stop");
-            CheckRules();
+            rules.CheckRules();
+            UI.Refresh();
+            hitRailBalls.Clear();
+            pottedBalls.Clear();
+            contactedBalls.Clear();
+            if (isGameOver == false)
+            {
+                if (toSwitchTurn)
+                {
+                    SwitchTurn();
+                }
+                else
+                {
+                    KeepTurn();
+                }
+            }
         }
     }
 

@@ -22,7 +22,14 @@ TagManager:
   - Ball13
   - Ball14
   - Ball15
+  - Rails
   - Rail
+  - Timer1
+  - Timer2
+  - BallShowLeft
+  - BallShowRight
+  - BallShowCenter
+  - PocketTrigger
   layers:
   - Default
   - TransparentFX
@@ -30,10 +37,10 @@ TagManager:
   - 
   - Water
   - UI
-  - 
-  - 
-  - 
-  - 
+  - Rail
+  - BallCollider
+  - Pocket
+  - Area
   - 
   - 
   - 

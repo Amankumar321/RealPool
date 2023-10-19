@@ -1,80 +1,158 @@
+using System;
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 
 public class Player : MonoBehaviour
 {
-    private string group;
-    private List<string> groupSolids = new List<string> {"Ball1", "Ball2", "Ball3", "Ball4", "Ball5", "Ball6", "Ball7"};
-    private List<string> groupStripes = new List<string> {"Ball9", "Ball10", "Ball11", "Ball12", "Ball13", "Ball14", "Ball15"};
+    public bool hasBallInHand = false;
+    private GameController gc;
 
-    private List<string> groupBalls = new List<string>();
+    public bool isBot = false;
 
-    private bool didPotAll = false;
-    private bool hasGroup = false;
+    public GameObject markerPrefab;
 
     // Start is called before the first frame update
     void Start()
     {
-        
+        gc = GameObject.Find("GameController").GetComponent<GameController>();
+        gc.onTurnEvent.AddListener(CheckRecieveTurn);
     }
 
-    public void SetGroup(string g)
+    public void RecieveBallInHand()
     {
-        group = g;
-        if (g == "Stripes")
+        hasBallInHand = true;
+    }
+
+    public void CheckRecieveTurn()
+    {
+        if (isBot && this == gc.activePlayer)
         {
-            foreach (string s in groupStripes) {
-                groupBalls.Add(s);
+            AutomaticShot();
+        }
+    }
+
+    public void MakeBot()
+    {
+        isBot = true;
+    }
+
+    IEnumerator TakeShot()
+    {
+        yield return new WaitForSeconds(2);
+        gc.cue.TakeShot(100, Vector3.zero);
+    }
+
+    public void AutomaticShot()
+    {
+        Debug.Log("Bot playing");
+
+        List<Ball> legalBalls = new();
+
+        foreach (Ball b in gc.balls.GetAll())
+        {
+            if (gc.rules.IsLegalBall(b.tag))
+            {
+                legalBalls.Add(b);
             }
-            hasGroup = true;
         }
-        if (g == "Solids")
+
+        List<Vector3> availablePoints = new();
+        List<Ball> availableBall = new();
+        List<float> availableAngle = new();
+
+
+        GameObject[] rails = GameObject.FindGameObjectsWithTag("Rail");
+        GameObject[] pockets = GameObject.FindGameObjectsWithTag("Pocket");
+
+        foreach (Ball b in legalBalls)
         {
-            foreach (string s in groupSolids) {
-                groupBalls.Add(s);
+            if (b.tag == "CueBall") continue;
+            foreach (GameObject pocket in pockets)
+            {
+                Vector3 pocketTargetPosition = new (pocket.transform.position.x, b.transform.position.y, pocket.transform.position.z);
+                Ray ray = new Ray(b.transform.position, b.transform.position - pocketTargetPosition);
+                float radius = b.GetComponent<SphereCollider>().radius * b.transform.lossyScale.x;
+
+                Vector3 contactPoint = ray.GetPoint(2 * radius);
+                Vector3 start = gc.cueBall.transform.position;
+                float length = (contactPoint - start).magnitude;
+                RaycastHit[] hitAll = Physics.SphereCastAll(start, radius, contactPoint - start, length);
+                bool canHitDirectly = true;
+
+                float angleShot = Vector3.Angle(contactPoint - start, pocketTargetPosition - b.transform.position);
+                if (angleShot > 90)
+                {
+                    continue;
+                }
+
+                foreach (RaycastHit hit in hitAll)
+                {
+                    if (!(hit.transform.tag == "CueBall" || hit.transform.tag == b.transform.tag)) {
+                        //Debug.Log(hit.transform.name + "when hitting " +  b.transform.tag);
+                        canHitDirectly = false;
+                        break;  
+                    }
+                }
+
+                Vector3 directionPot = pocketTargetPosition - b.transform.position;
+                float lengthPot = directionPot.magnitude;
+
+                RaycastHit[] potAll = Physics.SphereCastAll(b.transform.position, radius, directionPot, lengthPot);
+                bool canPotDirectly = true;
+
+                foreach (RaycastHit hit in potAll)
+                {
+                    if (!(hit.transform.tag == "Pocket" || hit.transform.tag == b.transform.tag)) {
+                        //Debug.Log(hit.transform.name + "when potting " +  b.transform.tag);
+                        canPotDirectly = false;
+                        break;
+                    }
+                }
+
+                if (canHitDirectly && canPotDirectly)
+                {
+                    availablePoints.Add(contactPoint);
+                    availableBall.Add(b);
+                    availableAngle.Add(angleShot);
+                }
             }
-            hasGroup = true;
         }
-    }
 
-    public void PotBalls(List<string> balls)
-    {
-        foreach (string s in balls)
+        foreach (Vector3 pos in  availablePoints)
         {
-            if (groupBalls.Contains(s)) {
-                groupBalls.Remove(s);
+            //Debug.Log(b.tag);
+            //GameObject g = Instantiate(markerPrefab);
+            //g.transform.position = pos;
+        }
+
+        Debug.Log("Available Shots: " + availablePoints.Count);
+
+        if (availablePoints.Count > 0)
+        {
+            //int randomInt = UnityEngine.Random.Range(0, availablePoints.Count);
+            int index = 0;
+            float highestPercentage = 0;
+            for (int i = 0; i < availablePoints.Count; i++)
+            {
+                if (1 / availableAngle[i] > highestPercentage) {
+                    index = i;
+                }
             }
+
+            gc.cue.transform.forward = availablePoints[index] - gc.cueBall.transform.position;
+            
+            StartCoroutine(TakeShot());
         }
-        if (hasGroup && groupBalls.Count == 0) 
+
+        else
         {
-            didPotAll = true;
+            Debug.Log("No point");
         }
+
+        //gameObject.GetComponent<BoxCollider>().boun
     }
 
-    public bool CanPotBlack()
-    {
-        Debug.Log("can pot black");
-        Debug.Log(didPotAll);
-        return didPotAll;
-    }
-
-    public bool BallInGroup(string ball)
-    {
-        if (hasGroup && groupBalls.Contains(ball))
-        {
-            return true;
-        }
-        if (didPotAll && (ball == "Ball8")) {
-            return true;
-        }
-        return false;
-    }
-
-    public bool HasGroup()
-    {
-        return hasGroup;
-    }
 
     // Update is called once per frame
     void Update()
